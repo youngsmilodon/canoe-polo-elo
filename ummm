@@ -1,0 +1,270 @@
+import mysql.connector, sys, PySimpleGUI as sg
+
+
+class player:  #should probably convert to tuple at some point?
+    def __init__(self, elo, fname, sname, clubs):
+        self.elo = elo
+        self.fnm = fname
+        self.snm = sname
+        self.clb = clubs
+        
+
+def newplayer(): #opens a popup to take new player details
+    layout = [      
+                [sg.Text('Enter Player Details')],      
+                [sg.Text('Forname', size=(15, 1)), sg.InputText('', size=(26, 1))],      
+                [sg.Text('Surname', size=(15, 1)), sg.InputText('', size=(26, 1))],      
+                [sg.Text('Starting Elo (default 1000)', size=(20, 1)), sg.InputText('', size=(20, 1))],      
+                [sg.Submit(), sg.Cancel()]      
+            ]
+
+    window = sg.Window('New Player').Layout(layout)         
+    event, values = window.Read()
+    window.Close()
+    if event == 'Submit' and values[0] != '' and values[1] != '' and values[2] != 0:
+        return player(values[2], values[0], values[1], [])
+    else:
+        return 'FALSE'
+
+def newteam(): #opens a popup to take team name
+    layout = [            
+                [sg.Text('Team Name', size=(15, 1)), sg.InputText('', size=(26, 1))],           
+                [sg.Submit(), sg.Cancel()]      
+            ]
+    
+    window = sg.Window('New Team').Layout(layout)         
+    event, values = window.Read()
+    window.Close()
+    if event == 'Submit' and values[0] != '':
+        return values[0]
+    else:
+        return 'FALSE'
+        
+def openfile(name):
+    file = open(name, "r")
+    length = len(file.readlines())
+    file.seek(0)
+
+    players = {}
+    i = 0
+    for i in range(length):
+        line = file.readline()
+        fname = ""
+        sname = ""
+        elo = ""
+        num = ""
+        k = 0
+        for j in line:
+            if j == " ":
+                k += 1
+            if k == 0:
+                num += j
+            if k == 1 and j != " ":
+                elo += j
+            if k == 2 and j != " ":
+                fname += j
+            if k == 3 and j != " ":
+                sname += j
+
+        players[num] = player(int(elo), fname, sname, [])
+    file.close()
+    return players
+        
+def savefile(players, name):
+    file = open(name, "w")
+
+    for i in players:
+        file.write(str(i))
+        file.write(" ")
+        file.write(str(players[i].elo))
+        file.write(" ")
+        file.write(players[i].fnm)
+        file.write(" ")
+        file.write(players[i].snm)
+        file.write(" \n")
+
+def teamelo(team, database):
+    elo = 0
+    tp = len(team)
+    for i in team:
+        elo += int(database[i].elo)
+    elo = elo/tp
+    if tp == 6:
+        elo += 10
+    elif tp == 7:
+        elo += 15
+    elif tp == 8:
+        elo += 20
+    return elo
+
+def elocalc(teams, allt, database):
+    layout = [      
+                [sg.Text('Enter Match Details')],      
+                [sg.Text('Team 1'), sg.InputCombo(allt, size=(20, 1)), sg.Text('Goals'), sg.InputText('', size=(10, 1))],      
+                [sg.Text('Team 2'), sg.InputCombo(allt, size=(20, 1)), sg.Text('Goals'), sg.InputText('', size=(10, 1))],            
+                [sg.Submit(), sg.Cancel()]      
+            ]
+
+    window = sg.Window('Enter Game').Layout(layout)         
+    event, values = window.Read()
+    window.Close()
+    if event == 'Submit' and values[1] != '' and values[3] != '':
+        g1 = int(values[1])
+        g2 = int(values[3])
+        g = abs(g1 - g2)
+        if g < 2:
+            g = 1
+        elif g == 2:
+            g = 3/2
+        else:
+            g = (11 + (g))/8
+        if g1 > g2:
+            w = 1
+        elif g2 > g1:
+            w = 0
+        else:
+            w = 0.5
+        t1e = teamelo(teams[values[0]], database)
+        t2e = teamelo(teams[values[2]], database)
+        dr = abs(t1e-t2e)
+        we = 1/(10**(((-1)*dr)/400)+1)
+        if t1e > t2e:
+            t1we = we
+        else:
+            t1we = 1 - we
+        t2we = 1 - t1we
+        p = round(50 * g * (w - t1we))
+        
+        return [[values[0],p], [values[2],p*-1]]
+    else:
+        return 'FALSE'
+
+    file.close()
+#Converting data to lists of strings so SimpleGui can display them :'(
+def strlist(players, database):
+    thing = []
+    for i in players:
+        if i in database:
+            thing.append(str(database[i].elo) + ' ' + database[i].fnm + ' ' + database[i].snm)
+    return thing
+
+def strlist2(teams):
+    thing = []
+    for i in teams:
+        thing.append(i)
+    return thing
+#takes a string and finds it's id number in the database, because SimpleGui is a lot of effort
+def findplayer(string, database):
+    for i in database:
+        if string == str(database[i].elo) + ' ' + database[i].fnm + ' ' + database[i].snm:
+            num = i
+    return num
+    
+    
+
+#The Beginning of the thing
+file = "50elo.txt"    
+database = openfile(file)    #Hashmap linking id numbers to details
+teams = {}        #Hashmap linking team name to a list of id numbers
+players = []
+for i in database:
+    players.append(i)       #players = list of all id numbers
+
+
+#GUI formatting
+
+#Converting data to lists of strings so SimpleGui can display them :'(
+allp = strlist(players, database)
+allt = strlist2(teams)
+roster = []           
+selecteam = ''
+
+column1 = [[sg.Button('Record Game')],
+           [sg.T('')],
+           [sg.T('')],
+           [sg.T('')],
+           [sg.T('')],
+           [sg.T('')],
+           [sg.T('')],
+           [sg.T('')],
+           [sg.Button('Add to team ->')],
+           [sg.Button('<- Remove from team')]
+        ]
+column2 = [[sg.Button('Create Team'), sg.Button('Delete Team')],
+           [sg.Listbox(values=allt, size=(30, 8), key = 'teams')],
+           [sg.Button('Edit Team'), sg.T(selecteam, key = 'selecteam')],
+           [sg.Listbox(values=roster, size=(30, 8), key = 'roster')]
+           ]
+
+layout = [[sg.Text('Players')],
+          [sg.Input(size=(20, 1)), sg.Button('Search')],                    
+          [sg.Listbox(values=allp, size=(30, 32), key='fulllist'),sg.Column(column1),sg.Column(column2)],
+          [sg.Button('Create Player'), sg.Button('Delete Player'), sg.Exit()]  
+        ]
+window = sg.Window('Canoe Pelo').Layout(layout)      
+
+while True:      
+    event, values = window.Read()      
+    if event is None or event == 'Exit':      
+        break
+
+#Making the buttons do what they're supposed to
+    if event == 'Record Game':
+        elo = elocalc(teams, allt, database)
+        if elo != 'FALSE':
+            for i in range(2):     #updating elos in database
+                for j in teams[elo[i][0]]:
+                    database[j].elo += elo[i][1]
+    
+    if event == 'Add to team ->' and selecteam != '':
+        teams[selecteam].append(findplayer(values['fulllist'][0], database))
+
+    elif event == '<- Remove from team' and selecteam != '':
+        teams[selecteam].remove(findplayer(values['roster'][0], database))
+
+    elif event == 'Edit Team' and teams != []:
+        selecteam = values['teams'][0]        
+        
+    elif event == 'Create Team':
+        jeff = newteam()
+        if jeff != 'FALSE':            
+            teams[jeff] = []
+            
+    elif event == 'Delete Team' and teams != []:
+        teams.pop(values['teams'][0])
+        if selecteam == values['teams'][0]:
+            selecteam = ''
+            roster = []
+
+    elif event == 'Create Player':
+        jeff = newplayer()
+        if jeff != 'FALSE':
+            num = 0
+            for i in database: #creating unique id number
+                if int(i) >= num:
+                    num = int(i) + 1
+            database[num] = jeff
+            players.append(num)
+
+    elif event == 'Delete Player':
+        num = findplayer(values['fulllist'][0], database)
+        players.remove(num)
+        database.pop(num)
+        
+    elif event == 'Search':
+        sg.Popup("Yeah that doesn't work yet") 
+
+#updating display
+    allp = strlist(players, database)
+    window.FindElement('fulllist').Update(allp)
+    allt = strlist2(teams)
+    window.FindElement('teams').Update(allt)
+    if selecteam != '':
+        roster = strlist(teams[selecteam], database)
+    window.FindElement('roster').Update(roster)
+    window.FindElement('selecteam').Update(selecteam)
+
+
+
+window.Close()    
+savefile(database, file)   
